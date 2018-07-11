@@ -1,0 +1,200 @@
+.model  tiny 
+.org    100h 
+begin_resident:
+.data
+      old_int         dd  0   
+      nameFile        db  256 dup(0)  
+      
+      stringIsMore    db      "STRING_IS_MORE",0Ah,0Dh,'$'  
+      
+      currentStringSize dw 0
+      comparingWithSize dw 10
+      
+      open_error_mess     db      "Error opening the file",0Ah,0Dh,'$'
+      cmd_error_mess      db      "Error! Don't found params",0Ah,0Dh,'$' 
+      message         db      "End! Program stay resident",0Ah,0Dh,'$' 
+      message1        db      "Consol line is read", 0Ah, 0Dh, '$'
+      message2        db      "Interrupt is get", 0Ah, 0Dh, '$'
+      message3        db      "New interrupt is set", 0Ah, 0Dh, '$'
+      message4 db "check", 0Ah, 0Dh, '$' 
+      begin_find_mess db "begin_find", 0Ah, 0Dh, '$'
+      compare_mess db "compare", 0Ah, 0Dh, '$'  
+      equal_mess db "equal", 0Ah, 0Dh, '$' 
+      notEqual_mess db "notEqual", 0Ah, 0Dh, '$' 
+      main_str_finish_mess db "main_str_finish", 0Ah, 0Dh, '$' 
+      substr_finish_mess db "substr_finish", 0Ah, 0Dh, '$' 
+      finish_find_mess db "finish_find", 0Ah, 0Dh, '$'
+      finish_file_mess db "finish_file", 0Ah, 0Dh, '$'
+      next_mess db "next", 0Ah, 0Dh, '$'   
+      enter           db      0Ah, 0Dh, '$'      
+      file            dw      0 
+      buffer          db      0 
+      length equ 200
+      flag  db 0
+      
+      str  db length dup('$') 
+      
+      substr  db length dup('$')  
+      
+;-----------------------------------------------------------------------
+.code
+
+jmp START
+       
+PRINT MACRO outLine                   
+      mov      ah, 09h  
+      lea      dx, outline
+      int      21h     
+endm    
+
+;---------------------------------------------------------------
+
+COMMAND_LINE PROC   
+      push cx 
+      push si
+      push di
+      push ax
+      
+      xor cx, cx 
+      mov cl, es:[80h]        ; cmd nah-sa v es:[80h] ( dlina )
+      cmp cl, 0
+      
+      je NO_FIND_COMMAND_LINE
+      
+      mov di, 82h             ; esli para-ri ne 0 togda v di parametri stroki
+      mov si, offset nameFile ; v si filename
+READ_FN:                      ; chitat filovuy stroku
+      mov al, es:[di]         
+      cmp al, 20h             ; compare with _
+      
+      je READ_WORD
+      
+      mov [si], al 
+      inc di 
+      inc si 
+      jmp READ_FN     
+READ_WORD:
+    mov [si], 24h
+    mov si, offset substr 
+READ_WORD_LOOP:
+
+    inc di
+    mov al, es:[di]
+    cmp al, 0Dh 
+    
+    je PARAM_IS_READ
+    
+    mov [si], al 
+    inc si 
+    jmp READ_WORD_LOOP
+PARAM_IS_READ:
+    mov [si], 24h  
+    pop ax
+    pop di 
+    pop si 
+    pop cx 
+    
+    ret    
+COMMAND_LINE endp 
+
+NO_FIND_COMMAND_LINE:                            
+      PRINT    [cmd_error_mess]
+      jmp      exit                                  
+      
+;--------------------------------------------------------------  
+
+READ_FROM_FILE proc 
+      push dx
+      push ax 
+      push bx 
+      push cx
+      mov      dx, offset nameFile 
+      mov      ah, 3Dh  ;open file
+      mov      al, 0 
+      int      21h 
+      
+      jc error_open   
+      
+      mov      [file], ax  ;ax(descr file)->[File]
+      mov      bx, [file]  ;bx <- descr File
+        
+      lea si, str          ;in si smeshenie stroki str
+      dec si 
+                                                                                                   
+cycle: 
+
+      mov      cx, 1       ;count byte for read 
+      mov      ah, 3fh     ;read from file
+      mov      dx, offset buffer   ;buffer for the reading byte
+      int      21h        
+      
+       
+      cmp      ax, 0 
+      je finish_file       
+      
+      add currentStringSize,1 
+          
+      cmp      [buffer], 0Dh   ; ESLI KONEC STROKI
+      je check_stringSize 
+      continue_finding:
+         
+      inc si  
+      mov ch, [buffer]
+      mov [si], ch
+      jmp cycle 
+                
+                
+check_stringSize:  
+push ax
+push dx  
+
+mov ax,currentStringSize
+mov dx,comparingWithSize 
+ 
+cmp ax,dx        ; bolee chem ukazano
+ja string_is_more_than_max  
+continue_cheking:   
+
+xor ax,ax
+xor dx,dx
+
+mov currentStringSize ,ax
+                                            
+pop dx
+pop ax
+jmp continue_finding    
+ 
+ 
+string_is_more_than_max:   
+PRINT [stringIsMore]
+jmp continue_cheking
+ 
+ 
+finish_file: 
+      mov      ah, 3eh    ;close file
+      mov      bx, [file] ;descr file 
+      int      21h     
+      
+      jmp return 
+       
+error_open:  
+      PRINT    [open_error_mess] 
+return:
+      pop cx 
+      pop bx 
+      pop ax 
+      pop dx
+        ret      
+
+READ_FROM_FILE endp                         
+      
+;-----------------------------------------------------------------                       
+
+START:    
+      call     COMMAND_LINE ; after that in <nameFile> save direction for file  
+      call     READ_FROM_FILE
+exit:                        
+      mov     ax, 4c00h    
+      int     21h                        
+
+end START         
